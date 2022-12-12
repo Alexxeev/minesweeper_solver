@@ -1,8 +1,9 @@
 from typing import Generator, Tuple
+from itertools import chain
 import numpy as np
 import random as rand
 
-class MinesweeperField:
+class Field:
     def __init__(self, length: int, height: int, number_of_mines: int) -> None:
         self.length: int = length
         self.height: int = height
@@ -55,17 +56,33 @@ class MinesweeperField:
         if x < self.length - 1 and y < self.height - 1:
             yield x + 1, y + 1
 
-    def covered_neighbours(self, x: int, y: int) -> Generator:
+    def neighbours_of_value(self, x: int, y: int, value: str) -> Generator:
         for x_neighbour, y_neighbour in self.neighbours(x, y):
-            if self.game_grid[x_neighbour, y_neighbour] == '*':
+            if self.game_grid[x_neighbour, y_neighbour] == value:
                 yield x_neighbour, y_neighbour
+
+    def covered_neighbours(self, x: int, y: int) -> Generator:
+        return self.neighbours_of_value(x, y, '*')
+
+    def flagged_neighbours(self, x: int, y: int) -> Generator:
+        return self.neighbours_of_value(x, y, 'f')
+
+    def covered_or_flagged_neighbours(self, x: int, y: int) -> Generator:
+        return chain(self.covered_neighbours(x, y), self.flagged_neighbours(x, y))
     
-    def covered_cells_near_hints(self) -> Generator:
+    def covered_or_flagged_cells_near_hints(self) -> Generator:
         for x in range(0, self.length):
             for y in range(0, self.height):
-                if self.game_grid[x, y] == '*' and self.__is_hint_nearby(x, y):
+                if self.game_grid[x, y] == 'f' or (self.game_grid[x, y] == '*' and self.__is_hint_nearby(x, y)):
                     yield x, y
+
+    def flag_mine(self, x: int, y: int):
+        self.game_grid[x, y] = 'f'
+        return self
     
+    def has_covered_cells(self) -> bool:
+        return '*' in self.game_grid
+
     def open_up(self, x: int, y: int):
         if self.game_grid[x,y] == '*':
             self.__uncover_field(x,y)
@@ -115,10 +132,3 @@ class MinesweeperField:
                 if not self.__is_mine(x, y):
                     self.reference_grid[x, y] = self.__mines_near_count(x, y)
         return self
-    
-
-
-# field = MinesweeperField(9, 9, 10)
-# print(field)
-# for unc in field.covered_cells_near_hints():
-#     print(unc)
