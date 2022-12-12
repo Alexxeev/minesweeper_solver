@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Generator, Tuple
 from dd import autoref as _bdd
 from field import Field
 from itertools import combinations
@@ -36,7 +36,7 @@ class FieldStateSolver:
                 solution = solution & dnf
         return solution
 
-    def all_sat(self) -> dict[Tuple[int, int], bool]:
+    def all_sat(self) -> dict[Tuple[int, int], bool] | None:
         '''
         Solves a given field state. If there is more than one solution then exception is thrown
         '''
@@ -44,7 +44,7 @@ class FieldStateSolver:
         self.solution.collect_garbage()
         if len(models) != 1:
             #TODO check which variables are ambigously assigned
-            raise Exception('Ambiguous mine placement')
+            return None
         model = models[0]
         result: dict[Tuple[int, int], bool] = dict()
         for var_name, is_mine in model.items():
@@ -64,16 +64,20 @@ class FieldStateSolver:
         flagged_conj = None
         if len(flagged_neighbours) > 0:
             flagged_conj = self.__vars_conjunction(flagged_vars)
+        # Pattern 1 — all mines are already flagged
         if len(flagged_neighbours) == mine_count or len(neighbours) == 0:
             vars_negated = [Variable(x_comb, y_comb, False) for x_comb, y_comb in neighbours if (x_comb, y_comb) not in flagged_neighbours]
             if len(vars_negated) > 0:
                 flagged_conj = flagged_conj & self.__vars_conjunction(vars_negated)
             return flagged_conj
+        # Pattern 2 — count of covered cells is less than the count of all mines
+        # that means that all the covered cells are mines
         if len(neighbours) < mine_count:
             vars = [Variable(x_comb, y_comb, True) for x_comb, y_comb in self.field.covered_or_flagged_neighbours(x, y)]
             return self.__vars_conjunction(vars)
         dnf = None
-
+        # Pattern 3 — count of covered cells is equal or greater than the count of all mines
+        # we need to check every combination of covered cells
         for combination in combinations(neighbours, mine_count):
             vars = [Variable(x_comb, y_comb, True) for x_comb, y_comb in combination]
             vars_negated = [Variable(x_comb, y_comb, False) for x_comb, y_comb in neighbours if (x_comb, y_comb) not in combination]
@@ -112,37 +116,29 @@ class FieldSolver:
     def __init__(self, field: Field) -> None:
         self.field = field
     
-    def solve_state(self):
-        solver = FieldStateSolver(field)
+    def solve_state(self) -> bool:
+        solver = FieldStateSolver(self.field)
         solution = solver.all_sat()
+        if not solution:
+            return False
         for (x, y), is_mine in solution.items():
             if is_mine:
-                field.flag_mine(x, y)
+                self.field.flag_mine(x, y)
             else:
-                field.open_up(x, y)
+                self.field.open_up(x, y)
+        return True
     
-    def solve(self):
+    def solve(self) -> Generator:
+        yield str(self.field)
         while self.field.has_covered_cells():
-            self.solve_state()
-            print(self.field)
-        print(self.field.print_reference_field())
+            if not self.solve_state():
+                yield 'There is possible ambigous mine placement.'
+                break
+            yield str(self.field)
+        yield self.field.print_reference_field()
 
-field = Field(9, 9, 10)
-#print('Init state')
-print(field)
-#print(field.print_reference_field())
-# solver = FieldStateSolver(field)
-# solution = solver.all_sat()
-
-# for (x, y), is_mine in solution.items():
-#     if is_mine:
-#         field.flag_mine(x, y)
-#     else:
-#         field.open_up(x, y)
-
-# print('After 1-st iteration of solution')
+# field = Field(9, 9, 10)
 # print(field)
-# print(field.print_reference_field())
 
-solver = FieldSolver(field)
-solver.solve()
+# solver = FieldSolver(field)
+# solver.solve()
