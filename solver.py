@@ -27,13 +27,10 @@ class FieldStateSolver:
         '''
         for x, y in self.field.covered_or_flagged_cells_near_hints():
             self.solution.declare(f'x{x}_{y}')
-        solution = None #sadly we cannot create empty expressions
+        solution = self.solution.true
         for x, y, mine_count in self.field.hints():
             dnf = self.__build_dnf(x, y, mine_count)
-            if solution is None:
-                solution = dnf
-            else:
-                solution = solution & dnf
+            solution = solution & dnf
         return solution
 
     def all_sat(self) -> dict[Tuple[int, int], bool] | None:
@@ -61,7 +58,7 @@ class FieldStateSolver:
         neighbours = list(self.field.covered_neighbours(x, y))
         flagged_neighbours = list(self.field.flagged_neighbours(x, y))
         flagged_vars = [Variable(x_comb, y_comb, True) for x_comb, y_comb in flagged_neighbours]
-        flagged_conj = None
+        flagged_conj = self.solution.true
         if len(flagged_neighbours) > 0:
             flagged_conj = self.__vars_conjunction(flagged_vars)
         # Pattern 1 — all mines are already flagged
@@ -75,7 +72,7 @@ class FieldStateSolver:
         if len(neighbours) < mine_count:
             vars = [Variable(x_comb, y_comb, True) for x_comb, y_comb in self.field.covered_or_flagged_neighbours(x, y)]
             return self.__vars_conjunction(vars)
-        dnf = None
+        dnf = self.solution.false
         # Pattern 3 — count of covered cells is equal or greater than the count of all mines
         # we need to check every combination of covered cells
         for combination in combinations(neighbours, mine_count):
@@ -84,14 +81,8 @@ class FieldStateSolver:
             conj = self.__vars_conjunction(vars)
             if len(vars_negated) > 0:
                 conj = conj & self.__vars_conjunction(vars_negated)
-            if dnf is None:
-                dnf = conj
-            else:
-                dnf = dnf | conj
-        if not flagged_conj is None:
-            if dnf is None:
-                print(f'x{x}_{y}: {mine_count}')
-            dnf = dnf & flagged_conj
+            dnf = dnf | conj
+        dnf = dnf & flagged_conj
         return dnf
 
     def __var_expression(self, var: Variable) -> _bdd.Function:
